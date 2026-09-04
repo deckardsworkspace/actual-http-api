@@ -89,6 +89,19 @@ describe('Budget Module', () => {
       holdBudgetForNextMonth: jest.fn().mockResolvedValue(undefined),
       resetBudgetHold: jest.fn().mockResolvedValue(undefined),
       runBankSync: jest.fn().mockResolvedValue(undefined),
+      getAccountGroups: jest.fn().mockResolvedValue([
+        { id: 'group1', name: 'Group 1' },
+        { id: 'group2', name: 'Group 2' },
+      ]),
+      createAccountGroup: jest.fn().mockResolvedValue({
+        id: 'new-group',
+        name: 'New Group',
+      }),
+      updateAccountGroup: jest.fn().mockResolvedValue({
+        id: 'group1',
+        name: 'Group 1 Updated',
+      }),
+      deleteAccountGroup: jest.fn().mockResolvedValue(undefined),
       getRules: jest.fn().mockResolvedValue([
         { id: 'rule1', description: 'Auto-categorize' }
       ]),
@@ -794,6 +807,39 @@ describe('Budget Module', () => {
     it('should run bank sync with account id', async () => {
       await budget.runBankSync('acc1');
       expect(mockActualApi.runBankSync).toHaveBeenCalledWith({ accountId: 'acc1' });
+    });
+  });
+
+  describe('Account Groups Management', () => {
+    let budget;
+
+    beforeEach(async () => {
+      budget = await Budget('sync1', undefined);
+    });
+
+    it('should get all account groups', async () => {
+      const groups = await budget.getAccountGroups();
+      expect(groups).toHaveLength(2);
+      expect(groups[0].id).toBe('group1');
+    });
+
+    it('should create a new account group', async () => {
+      const newGroup = { name: 'New Group' };
+      const result = await budget.createAccountGroup(newGroup);
+      expect(mockActualApi.createAccountGroup).toHaveBeenCalledWith(newGroup);
+      expect(result.id).toBe('new-group');
+    });
+
+    it('should update an account group', async () => {
+      const updates = { name: 'Updated Group' };
+      const result = await budget.updateAccountGroup('group1', updates);
+      expect(mockActualApi.updateAccountGroup).toHaveBeenCalledWith('group1', updates);
+      expect(result.id).toBe('group1');
+    });
+
+    it('should delete an account group', async () => {
+      await budget.deleteAccountGroup('group1');
+      expect(mockActualApi.deleteAccountGroup).toHaveBeenCalledWith('group1');
     });
   });
 

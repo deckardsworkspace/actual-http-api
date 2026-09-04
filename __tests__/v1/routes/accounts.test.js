@@ -84,6 +84,19 @@ describe('Accounts Routes', () => {
       closeAccount: jest.fn().mockResolvedValue(undefined),
       reopenAccount: jest.fn().mockResolvedValue(undefined),
       runBankSync: jest.fn().mockResolvedValue(undefined),
+      getAccountGroups: jest.fn().mockResolvedValue([
+        { id: 'group1', name: 'Group 1' },
+        { id: 'group2', name: 'Group 2' },
+      ]),
+      createAccountGroup: jest.fn().mockResolvedValue({
+        id: 'new-group',
+        name: 'New Group',
+      }),
+      updateAccountGroup: jest.fn().mockResolvedValue({
+        id: 'group1',
+        name: 'Group 1 Updated',
+      }),
+      deleteAccountGroup: jest.fn().mockResolvedValue(undefined),
       // Actual-QL helpers used by the new balancehistory implementation
       q: jest.fn().mockReturnValue(aqBuilder),
       runQuery: jest.fn(),
@@ -932,6 +945,235 @@ describe('Accounts Routes', () => {
       await handler(mockReq, mockRes, mockNext);
 
       expect(mockNext).toHaveBeenCalledWith(error);
+    });
+  });
+
+  describe('GET /budgets/:budgetSyncId/accountgroups', () => {
+    it('should register the route', () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      expect(mockRouter.get).toHaveBeenCalledWith(
+        '/budgets/:budgetSyncId/accountgroups',
+        expect.any(Function)
+      );
+    });
+
+    it('should retrieve all account groups', async () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      const handler = handlers['GET /budgets/:budgetSyncId/accountgroups'];
+
+      await handler(mockReq, mockRes, mockNext);
+
+      expect(mockBudget.getAccountGroups).toHaveBeenCalledWith();
+      expect(mockRes.json).toHaveBeenCalledWith({
+        data: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'group1',
+            name: 'Group 1',
+          }),
+        ]),
+      });
+    });
+
+    it('should handle errors from getAccountGroups', async () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      const handler = handlers['GET /budgets/:budgetSyncId/accountgroups'];
+      const error = new Error('Failed to retrieve account groups');
+      mockBudget.getAccountGroups.mockRejectedValueOnce(error);
+
+      await handler(mockReq, mockRes, mockNext);
+
+      expect(mockNext).toHaveBeenCalledWith(error);
+    });
+  });
+
+  describe('POST /budgets/:budgetSyncId/accountgroups', () => {
+    it('should register the route', () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      expect(mockRouter.post).toHaveBeenCalledWith(
+        '/budgets/:budgetSyncId/accountgroups',
+        expect.any(Function)
+      );
+    });
+
+    it('should create an account group', async () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      const handler = handlers['POST /budgets/:budgetSyncId/accountgroups'];
+      mockReq.body = {
+        accountGroup: {
+          name: 'New Account Group',
+        },
+      };
+
+      await handler(mockReq, mockRes, mockNext);
+
+      expect(mockBudget.createAccountGroup).toHaveBeenCalledWith(
+        { name: 'New Account Group' }
+      );
+      expect(mockRes.json).toHaveBeenCalledWith({
+        data: expect.objectContaining({ id: 'new-group' }),
+      });
+    });
+
+    it('should reject empty account group info', async () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      const handler = handlers['POST /budgets/:budgetSyncId/accountgroups'];
+      mockReq.body = {
+        accountGroup: {},
+      };
+
+      await handler(mockReq, mockRes, mockNext);
+
+      expect(mockNext).toHaveBeenCalledWith(expect.any(Error));
+    });
+
+    it('should reject missing account group property', async () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      const handler = handlers['POST /budgets/:budgetSyncId/accountgroups'];
+      mockReq.body = {};
+
+      await handler(mockReq, mockRes, mockNext);
+
+      expect(mockNext).toHaveBeenCalledWith(expect.any(Error));
+    });
+
+    it('should handle errors from createAccountGroup', async () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      const handler = handlers['POST /budgets/:budgetSyncId/accountgroups'];
+      mockReq.body = {
+        accountGroup: {
+          name: 'Group 1',
+        },
+      };
+      const error = new Error('Duplicate account group name');
+      mockBudget.createAccountGroup.mockRejectedValueOnce(error);
+
+      await handler(mockReq, mockRes, mockNext);
+
+      expect(mockNext).toHaveBeenCalledWith(error);
+    });
+  });
+
+  describe('PATCH /budgets/:budgetSyncId/accountgroups/:accountGroupId', () => {
+    it('should register the route', () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      expect(mockRouter.patch).toHaveBeenCalledWith(
+        '/budgets/:budgetSyncId/accountgroups/:accountGroupId',
+        expect.any(Function)
+      );
+    });
+
+    it('should update an account group', async () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      const handler = handlers['PATCH /budgets/:budgetSyncId/accountgroups/:accountGroupId'];
+      mockReq.params.accountGroupId = 'group1';
+      mockReq.body = {
+        accountGroup: {
+          name: 'Updated Name',
+        },
+      };
+
+      await handler(mockReq, mockRes, mockNext);
+
+      expect(mockBudget.getAccountGroups).toHaveBeenCalled();
+      expect(mockBudget.updateAccountGroup).toHaveBeenCalledWith(
+        'group1',
+        { name: 'Updated Name' },
+      );
+      expect(mockRes.json).toHaveBeenCalledWith({
+        message: 'Account group updated',
+      });
+    });
+
+    it('should reject update for nonexistent account group', async () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      const handler = handlers['PATCH /budgets/:budgetSyncId/accountgroups/:accountGroupId'];
+      mockReq.params.accountGroupId = 'nonexistent';
+      mockReq.body = {
+        accountGroup: {
+          name: 'Updated',
+        },
+      };
+
+      await handler(mockReq, mockRes, mockNext);
+
+      expect(mockNext).toHaveBeenCalledWith(new Error('Account group not found'));
+    });
+
+    it('should reject empty account group info', async () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      const handler = handlers['PATCH /budgets/:budgetSyncId/accountgroups/:accountGroupId'];
+      mockReq.params.accountGroupId = 'group1';
+      mockReq.body = {
+        accountGroup: {},
+      };
+
+      await handler(mockReq, mockRes, mockNext);
+
+      expect(mockNext).toHaveBeenCalledWith(expect.any(Error));
+    });
+  });
+
+  describe('DELETE /budgets/:budgetSyncId/accountgroups/:accountGroupId', () => {
+    it('should register the route', () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      expect(mockRouter.delete).toHaveBeenCalledWith(
+        '/budgets/:budgetSyncId/accountgroups/:accountGroupId',
+        expect.any(Function)
+      );
+    });
+
+    it('should delete an account group', async () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      const handler = handlers['DELETE /budgets/:budgetSyncId/accountgroups/:accountGroupId'];
+      mockReq.params.accountGroupId = 'group1';
+
+      await handler(mockReq, mockRes, mockNext);
+
+      expect(mockBudget.getAccountGroups).toHaveBeenCalled();
+      expect(mockBudget.deleteAccountGroup).toHaveBeenCalledWith('group1');
+      expect(mockRes.json).toHaveBeenCalledWith({
+        message: 'Account group deleted',
+      });
+    });
+
+    it('should reject deletion of nonexistent account group', async () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      const handler = handlers['DELETE /budgets/:budgetSyncId/accountgroups/:accountGroupId'];
+      mockReq.params.accountGroupId = 'nonexistent';
+
+      await handler(mockReq, mockRes, mockNext);
+
+      expect(mockNext).toHaveBeenCalledWith(new Error('Account group not found'));
     });
   });
 });
