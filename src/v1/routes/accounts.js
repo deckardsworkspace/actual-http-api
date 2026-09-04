@@ -15,6 +15,13 @@ const { isEmpty, formatDateToISOString, parseBoolean } = require('../../utils/ut
  *         type: string
  *       required: true
  *       description: Account id
+ *     accountGroupId:
+ *       name: accountGroupId
+ *       in: path
+ *       schema:
+ *         type: string
+ *       required: true
+ *       description: Account group id
  *     cutoffDate:
  *       name: cutoff_date
  *       in: query
@@ -62,8 +69,20 @@ const { isEmpty, formatDateToISOString, parseBoolean } = require('../../utils/ut
   *         workingBalance:
   *           type: integer
   *           description: Working balance (cleared + uncleared, only included when include_balances=true)
+  *         accountGroupId:
+  *           type: string
+  *           description: The id of the account group this account belongs to
   *     Amount:
   *       type: integer
+  *     AccountGroup:
+  *       required:
+  *         - name
+  *       type: object
+  *       properties:
+  *         id:
+  *           type: string
+  *         name:
+  *           type: string
   */
 
 module.exports = (router) => {
@@ -444,6 +463,8 @@ module.exports = (router) => {
    *                      type: string
    *                   offbudget:
    *                      type: boolean
+   *                   account_group_id:
+   *                      type: string
    *             examples:
    *               - account:
    *                   name: 'Checking new name'
@@ -666,6 +687,232 @@ module.exports = (router) => {
       await res.locals.budget.runBankSync();
       res.json({ message: 'Bank sync started' });    
     } catch(err) {
+      next(err);
+    }
+  });
+
+  /**
+   * @swagger
+   * /budgets/{budgetSyncId}/accountgroups:
+   *   get:
+   *     summary: Returns list of account groups
+   *     tags: [Accounts]
+   *     security:
+   *       - apiKey: []
+   *     parameters:
+   *       - $ref: '#/components/parameters/budgetSyncId'
+   *       - $ref: '#/components/parameters/budgetEncryptionPassword'
+   *     responses:
+   *       '200':
+   *         description: The list of account groups
+   *         content:
+   *           application/json:
+   *             schema:
+   *               required:
+   *                 - data
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/AccountGroup'
+   *               examples:
+   *                 - data:
+   *                   - id: 'f733399d-4ccb-4758-b208-7422b27f650a'
+   *                     name: 'Savings'
+   *       '404':
+   *         $ref: '#/components/responses/404'
+   *       '500':
+   *         $ref: '#/components/responses/500'
+   *   post:
+   *     summary: Creates an account group
+   *     tags: [Accounts]
+   *     security:
+   *       - apiKey: []
+   *     parameters:
+   *       - $ref: '#/components/parameters/budgetSyncId'
+   *       - $ref: '#/components/parameters/budgetEncryptionPassword'
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             required:
+   *               - account_group
+   *             type: object
+   *             properties:
+   *               account_group:
+   *                 $ref: '#/components/schemas/AccountGroup'
+   *             examples:
+   *               - account_group:
+   *                   name: 'Savings'
+   *     responses:
+   *       '200':
+   *         description: Account group id
+   *         content:
+   *           application/json:
+   *             schema:
+   *               required:
+   *                 - data
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   type: string
+   *                   description: Account group id
+   *               examples:
+   *                 - data: 'f733399d-4ccb-4758-b208-7422b27f650a'
+   *       '400':
+   *         $ref: '#/components/responses/400'
+   *       '404':
+   *         $ref: '#/components/responses/404'
+   *       '500':
+   *         $ref: '#/components/responses/500'
+   */
+  router.get('/budgets/:budgetSyncId/accountgroups', async (req, res, next) => {
+    try {
+      res.json({'data': await res.locals.budget.getAccountGroups()});
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post('/budgets/:budgetSyncId/accountgroups', async (req, res, next) => {
+    try {
+      if (!req.body.account_group) {
+        throw new Error('account_group object is required in the request body');
+      }
+      if (!req.body.account_group.name) {
+        throw new Error('account_group.name is required');
+      }
+      res.json({'data': await res.locals.budget.createAccountGroup(req.body.account_group)});
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * @swagger
+   * /budgets/{budgetSyncId}/accountgroups/{accountGroupId}:
+   *   get:
+   *     summary: Returns an account group
+   *     tags: [Accounts]
+   *     security:
+   *       - apiKey: []
+   *     parameters:
+   *       - $ref: '#/components/parameters/budgetSyncId'
+   *       - $ref: '#/components/parameters/accountGroupId'
+   *       - $ref: '#/components/parameters/budgetEncryptionPassword'
+   *     responses:
+   *       '200':
+   *         description: Account group
+   *         content:
+   *           application/json:
+   *             schema:
+   *               required:
+   *                 - data
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   $ref: '#/components/schemas/AccountGroup'
+   *               examples:
+   *                 - data:
+   *                     id: '9de084a4-dc96-4015-ac81-ba57ee340acd'
+   *                     name: 'Savings'
+   *       '404':
+   *         $ref: '#/components/responses/404'
+   *       '500':
+   *         $ref: '#/components/responses/500'
+   *   patch:
+   *     summary: Updates an account group
+   *     tags: [Accounts]
+   *     security:
+   *       - apiKey: []
+   *     parameters:
+   *       - $ref: '#/components/parameters/budgetSyncId'
+   *       - $ref: '#/components/parameters/accountGroupId'
+   *       - $ref: '#/components/parameters/budgetEncryptionPassword'
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             required:
+   *               - account_group
+   *             type: object
+   *             properties:
+   *               account_group:
+   *                 $ref: '#/components/schemas/AccountGroup'
+   *             examples:
+   *               - account_group:
+   *                   name: 'New Group Name'
+   *     responses:
+   *       '200':
+   *         description: Account group updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/GeneralResponseMessage'
+   *               examples:
+   *                 - message: Account group updated
+   *       '400':
+   *         $ref: '#/components/responses/400'
+   *       '404':
+   *         $ref: '#/components/responses/404'
+   *       '500':
+   *         $ref: '#/components/responses/500'
+   *   delete:
+   *     summary: Deletes an account group
+   *     tags: [Accounts]
+   *     security:
+   *       - apiKey: []
+   *     parameters:
+   *       - $ref: '#/components/parameters/budgetSyncId'
+   *       - $ref: '#/components/parameters/accountGroupId'
+   *       - $ref: '#/components/parameters/budgetEncryptionPassword'
+   *     responses:
+   *       '200':
+   *         description: Account group deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/GeneralResponseMessage'
+   *               examples:
+   *                 - message: Account group deleted
+   *       '404':
+   *         $ref: '#/components/responses/404'
+   *       '500':
+   *         $ref: '#/components/responses/500'
+   */
+  router.get('/budgets/:budgetSyncId/accountgroups/:accountGroupId', async (req, res, next) => {
+    try {
+      const allGroups = await res.locals.budget.getAccountGroups() || [];
+      const queriedGroup = allGroups.find(group => group.id === req.params.accountGroupId);
+      if (!queriedGroup) {
+        throw new Error(`Account group with id '${req.params.accountGroupId}' not found`);
+      }
+      res.json({'data': queriedGroup});
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.patch('/budgets/:budgetSyncId/accountgroups/:accountGroupId', async (req, res, next) => {
+    try {
+      if (!req.body.account_group) {
+        throw new Error('account_group object is required in the request body');
+      }
+      await res.locals.budget.updateAccountGroup(req.params.accountGroupId, req.body.account_group);
+      res.json({'message': 'Account group updated'});
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.delete('/budgets/:budgetSyncId/accountgroups/:accountGroupId', async (req, res, next) => {
+    try {
+      await res.locals.budget.deleteAccountGroup(req.params.accountGroupId);
+      res.json({'message': 'Account group deleted'});
+    } catch (err) {
       next(err);
     }
   });

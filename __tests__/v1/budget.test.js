@@ -113,6 +113,12 @@ describe('Budget Module', () => {
       createTag: jest.fn().mockResolvedValue({ id: 'tag2', tag: 'newtag' }),
       updateTag: jest.fn().mockResolvedValue({ id: 'tag1', tag: 'updated' }),
       deleteTag: jest.fn().mockResolvedValue(undefined),
+      getAccountGroups: jest.fn().mockResolvedValue([
+        { id: 'group1', name: 'Savings' }
+      ]),
+      createAccountGroup: jest.fn().mockResolvedValue('group2'),
+      updateAccountGroup: jest.fn().mockResolvedValue(undefined),
+      deleteAccountGroup: jest.fn().mockResolvedValue(undefined),
       getNote: jest.fn().mockResolvedValue({ id: 'cat1', note: 'Category note' }),
       updateNote: jest.fn().mockResolvedValue(undefined),
       shutdown: jest.fn(),
@@ -972,6 +978,42 @@ describe('Budget Module', () => {
       await budget.deleteTag('tag1');
 
       expect(mockActualApi.deleteTag).toHaveBeenCalledWith('tag1');
+    });
+  });
+
+  describe('Account Groups Management', () => {
+    let budget;
+
+    beforeEach(async () => {
+      budget = await Budget('sync1', undefined);
+    });
+
+    it('should get all account groups', async () => {
+      const groups = await budget.getAccountGroups();
+      expect(groups).toHaveLength(1);
+      expect(groups[0].id).toBe('group1');
+      expect(groups[0].name).toBe('Savings');
+    });
+
+    it('should create a new account group', async () => {
+      const newGroup = { name: 'Investment' };
+      const result = await budget.createAccountGroup(newGroup);
+
+      expect(mockActualApi.createAccountGroup).toHaveBeenCalledWith(newGroup);
+      expect(result).toBe('group2');
+    });
+
+    it('should update an account group', async () => {
+      const updates = { name: 'Investments' };
+      await budget.updateAccountGroup('group1', updates);
+
+      expect(mockActualApi.updateAccountGroup).toHaveBeenCalledWith('group1', updates);
+    });
+
+    it('should delete an account group', async () => {
+      await budget.deleteAccountGroup('group1');
+
+      expect(mockActualApi.deleteAccountGroup).toHaveBeenCalledWith('group1');
     });
   });
 
