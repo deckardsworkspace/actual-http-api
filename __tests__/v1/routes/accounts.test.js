@@ -589,6 +589,70 @@ describe('Accounts Routes', () => {
       );
     });
 
+    it('should map accountGroupId to account_group_id when creating an account', async () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      const handler = handlers['POST /budgets/:budgetSyncId/accounts'];
+      mockReq.body = {
+        account: {
+          name: 'New Account',
+          offbudget: false,
+          accountGroupId: 'group1',
+        },
+      };
+
+      await handler(mockReq, mockRes, mockNext);
+
+      expect(mockBudget.createAccount).toHaveBeenCalledWith(
+        { name: 'New Account', offbudget: false, account_group_id: 'group1' },
+        undefined
+      );
+      expect(mockRes.json).toHaveBeenCalledWith({
+        data: expect.objectContaining({ id: 'new-acc' }),
+      });
+    });
+
+    it('should create an account with both accountGroupId and initialBalance', async () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      const handler = handlers['POST /budgets/:budgetSyncId/accounts'];
+      mockReq.body = {
+        account: {
+          name: 'New Account',
+          offbudget: false,
+          accountGroupId: 'group2',
+          initialBalance: 10000,
+        },
+      };
+
+      await handler(mockReq, mockRes, mockNext);
+
+      expect(mockBudget.createAccount).toHaveBeenCalledWith(
+        { name: 'New Account', offbudget: false, account_group_id: 'group2' },
+        10000
+      );
+    });
+
+    it('should reject creation with an unknown accountGroupId', async () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      const handler = handlers['POST /budgets/:budgetSyncId/accounts'];
+      mockReq.body = {
+        account: {
+          name: 'New Account',
+          offbudget: false,
+          accountGroupId: 'nonexistent',
+        },
+      };
+
+      await handler(mockReq, mockRes, mockNext);
+
+      expect(mockNext).toHaveBeenCalledWith(new Error('Account group not found'));
+      expect(mockBudget.createAccount).not.toHaveBeenCalled();
+    });
     it('should return 400 for non-integer initialBalance', async () => {
       const accountsModule = require('../../../src/v1/routes/accounts');
       accountsModule(mockRouter);
@@ -688,6 +752,67 @@ describe('Accounts Routes', () => {
       });
     });
 
+    it('should map accountGroupId to account_group_id when updating an account', async () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      const handler = handlers['PATCH /budgets/:budgetSyncId/accounts/:accountId'];
+      mockReq.params.accountId = 'acc1';
+      mockReq.body = {
+        account: {
+          name: 'Updated Name',
+          accountGroupId: 'group1',
+        },
+      };
+
+      await handler(mockReq, mockRes, mockNext);
+
+      expect(mockBudget.updateAccount).toHaveBeenCalledWith('acc1', {
+        name: 'Updated Name',
+        account_group_id: 'group1',
+      });
+      expect(mockRes.json).toHaveBeenCalledWith({
+        message: 'Account updated',
+      });
+    });
+
+    it('should move an account to a group without other changes', async () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      const handler = handlers['PATCH /budgets/:budgetSyncId/accounts/:accountId'];
+      mockReq.params.accountId = 'acc1';
+      mockReq.body = {
+        account: {
+          accountGroupId: 'group2',
+        },
+      };
+
+      await handler(mockReq, mockRes, mockNext);
+
+      expect(mockBudget.updateAccount).toHaveBeenCalledWith('acc1', {
+        account_group_id: 'group2',
+      });
+    });
+
+    it('should reject update with an unknown accountGroupId', async () => {
+      const accountsModule = require('../../../src/v1/routes/accounts');
+      accountsModule(mockRouter);
+
+      const handler = handlers['PATCH /budgets/:budgetSyncId/accounts/:accountId'];
+      mockReq.params.accountId = 'acc1';
+      mockReq.body = {
+        account: {
+          name: 'Updated Name',
+          accountGroupId: 'nonexistent',
+        },
+      };
+
+      await handler(mockReq, mockRes, mockNext);
+
+      expect(mockNext).toHaveBeenCalledWith(new Error('Account group not found'));
+      expect(mockBudget.updateAccount).not.toHaveBeenCalled();
+    });
     it('should reject update for nonexistent account', async () => {
       const accountsModule = require('../../../src/v1/routes/accounts');
       accountsModule(mockRouter);
