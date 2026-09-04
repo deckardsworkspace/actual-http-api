@@ -15,6 +15,13 @@ const { isEmpty, formatDateToISOString, parseBoolean } = require('../../utils/ut
  *         type: string
  *       required: true
  *       description: Account id
+ *     accountGroupId:
+ *       name: accountGroupId
+ *       in: path
+ *       schema:
+ *         type: string
+ *       required: true
+ *       description: Account group id
  *     cutoffDate:
  *       name: cutoff_date
  *       in: query
@@ -53,6 +60,8 @@ const { isEmpty, formatDateToISOString, parseBoolean } = require('../../utils/ut
   *           type: boolean
   *         closed:
   *           type: boolean
+  *         account_group_id:
+  *           type: string
   *         clearedBalance:
   *           type: integer
   *           description: Cleared balance (only included when include_balances=true)
@@ -62,6 +71,16 @@ const { isEmpty, formatDateToISOString, parseBoolean } = require('../../utils/ut
   *         workingBalance:
   *           type: integer
   *           description: Working balance (cleared + uncleared, only included when include_balances=true)
+  *     AccountGroup:
+  *       required:
+  *         - id
+  *         - name
+  *       type: object
+  *       properties:
+  *         id:
+  *           type: string
+  *         name:
+  *           type: string
   *     Amount:
   *       type: integer
   */
@@ -116,11 +135,13 @@ module.exports = (router) => {
     *                     name: 'Checking'
     *                     offbudget: false
     *                     closed: false
+    *                     account_group_id: '3c1699a5-522a-435e-86dc-93d900a14f0e'
     *                 - data:
     *                   - id: '671b669d-b616-4bf1-8a04-c82d73f87d5b'
     *                     name: 'Checking'
     *                     offbudget: false
     *                     closed: false
+    *                     account_group_id: '3c1699a5-522a-435e-86dc-93d900a14f0e'
     *                     clearedBalance: 12000
     *                     unclearedBalance: -500
     *                     workingBalance: 11500
@@ -177,6 +198,7 @@ module.exports = (router) => {
    *                     name: 'Checking'
    *                     offbudget: false
    *                     closed: false
+   *                     account_group_id: '3c1699a5-522a-435e-86dc-93d900a14f0e'
    *       '404':
    *         $ref: '#/components/responses/404'
    *       '500':
@@ -377,11 +399,19 @@ module.exports = (router) => {
    *                   initialBalance:
    *                      type: integer
    *                      description: Optional initial balance in integer format (e.g. 10000 = $100.00)
+   *                   accountGroupId:
+   *                      type: string
+   *                      description: Optional account group id to assign the account to
    *             examples:
    *               - account:
    *                   name: 'Checking'
    *                   offbudget: false
    *                   initialBalance: 10000
+   *               - account:
+   *                   name: 'Checking'
+   *                   offbudget: false
+   *                   initialBalance: 10000
+   *                   account_group_id: '3c1699a5-522a-435e-86dc-93d900a14f0e'
    *     responses:
    *       '200':
    *         description: Account created
@@ -401,9 +431,13 @@ module.exports = (router) => {
   router.post('/budgets/:budgetSyncId/accounts', async (req, res, next) => {
     try {
       validateAccountBody(req.body.account);
-      const { initialBalance, ...account } = req.body.account;
+      const { initialBalance, accountGroupId, ...account } = req.body.account;
       if (initialBalance !== undefined && !Number.isInteger(initialBalance)) {
         throw new Error('initialBalance must be an integer (e.g. 10000 = $100.00)');
+      }
+      if (accountGroupId !== undefined) {
+        await validateAccountGroupExists(res, accountGroupId);
+        account.account_group_id = accountGroupId;
       }
       res.json({'data': await res.locals.budget.createAccount(account, initialBalance)});
     } catch(err) {
@@ -444,6 +478,8 @@ module.exports = (router) => {
    *                      type: string
    *                   offbudget:
    *                      type: boolean
+   *                   accountGroupId:
+   *                      type: string
    *             examples:
    *               - account:
    *                   name: 'Checking new name'
@@ -489,7 +525,13 @@ module.exports = (router) => {
     try {
       await validateAccountExists(res, req.params.accountId);
       validateAccountBody(req.body.account);
-      await res.locals.budget.updateAccount(req.params.accountId, req.body.account);
+
+      const { accountGroupId, ...account } = req.body.account;
+      if (accountGroupId !== undefined) {
+        await validateAccountGroupExists(res, accountGroupId);
+        account.account_group_id = accountGroupId;
+      }
+      await res.locals.budget.updateAccount(req.params.accountId, account);
       res.json({'message': 'Account updated'});
     } catch(err) {
       next(err);
@@ -670,6 +712,202 @@ module.exports = (router) => {
     }
   });
 
+  /**
+   * @swagger
+   * /budgets/{budgetSyncId}/accountgroups:
+   *   get:
+   *     summary: Retrieves all account groups
+   *     tags: [Accounts]
+   *     security:
+   *       - apiKey: []
+   *     parameters:
+   *       - $ref: '#/components/parameters/budgetSyncId'
+   *       - $ref: '#/components/parameters/budgetEncryptionPassword'
+   *     requestBody:
+   *       required: false
+   *     responses:
+   *       '200':
+   *         description: Account groups information
+   *         content:
+   *           application/json:
+   *             schema:
+   *               required:
+   *                 - data
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   $ref: '#/components/schemas/AccountGroup'
+   *               examples:
+   *                 - data:
+   *                     id: '3c1699a5-522a-435e-86dc-93d900a14f0e'
+   *                     name: 'Credit Cards'
+   *       '404':
+   *         $ref: '#/components/responses/404'
+   *       '500':
+   *         $ref: '#/components/responses/500'
+   */
+  router.get('/budgets/:budgetSyncId/accountgroups', async (req, res, next) => {
+    try {
+      const accountGroups = await res.locals.budget.getAccountGroups();
+      res.json({ data: accountGroups });
+    } catch(err) {
+      next(err);
+    }
+  });
+
+  /**
+   * @swagger
+   * /budgets/{budgetSyncId}/accountgroups:
+   *   post:
+   *     summary: Creates an account group
+   *     tags: [Accounts]
+   *     security:
+   *       - apiKey: []
+   *     parameters:
+   *       - $ref: '#/components/parameters/budgetSyncId'
+   *       - $ref: '#/components/parameters/budgetEncryptionPassword'
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             required:
+   *               - accountGroup
+   *             type: object
+   *             properties:
+   *               accountGroup:
+   *                 required:
+   *                   - name
+   *                 type: object
+   *                 properties:
+   *                   name:
+   *                      type: string
+   *             examples:
+   *               - accountGroup:
+   *                   name: 'Credit Cards'
+   *     responses:
+   *       '200':
+   *         description: Account group created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/GeneralResponseMessage'
+   *               examples:
+   *                 - message: Account group created
+   *       '400':
+   *         $ref: '#/components/responses/400'
+   *       '404':
+   *         $ref: '#/components/responses/404'
+   *       '500':
+   *         $ref: '#/components/responses/500'
+   */
+  router.post('/budgets/:budgetSyncId/accountgroups', async (req, res, next) => {
+    try {
+      validateAccountGroupBody(req.body.accountGroup);
+      const { ...accountGroup } = req.body.accountGroup;
+      res.json({'data': await res.locals.budget.createAccountGroup(accountGroup)});
+    } catch(err) {
+      next(err);
+    }
+  });
+
+  /**
+   * @swagger
+   * /budgets/{budgetSyncId}/accountgroups/{accountGroupId}:
+   *   patch:
+   *     summary: Updates an account group
+   *     tags: [Accounts]
+   *     security:
+   *       - apiKey: []
+   *     parameters:
+   *       - $ref: '#/components/parameters/budgetSyncId'
+   *       - $ref: '#/components/parameters/accountGroupId'
+   *       - $ref: '#/components/parameters/budgetEncryptionPassword'
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             required:
+   *               - accountGroup
+   *             type: object
+   *             properties:
+   *               accountGroup:
+   *                 required:
+   *                   - name
+   *                 type: object
+   *                 properties:
+   *                   name:
+   *                      type: string
+   *             examples:
+   *               - accountGroup:
+   *                   name: 'Credit Cards'
+   *     responses:
+   *       '200':
+   *         description: Account group updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/GeneralResponseMessage'
+   *               examples:
+   *                 - message: Account group updated
+   *       '400':
+   *         $ref: '#/components/responses/400'
+   *       '404':
+   *         $ref: '#/components/responses/404'
+   *       '500':
+   *         $ref: '#/components/responses/500'
+   */
+  router.patch('/budgets/:budgetSyncId/accountgroups/:accountGroupId', async (req, res, next) => {
+    try {
+      validateAccountGroupBody(req.body.accountGroup);
+      await validateAccountGroupExists(res, req.params.accountGroupId);
+      await res.locals.budget.updateAccountGroup(req.params.accountGroupId, req.body.accountGroup)
+      res.json({'message': 'Account group updated'});
+    } catch(err) {
+      next(err);
+    }
+  });
+
+  /**
+   * @swagger
+   * /budgets/{budgetSyncId}/accountgroups/{accountGroupId}:
+   *   delete:
+   *     summary: Deletes an account group
+   *     description: Deletes an account group. Any accounts in the group will be unlinked automatically.
+   *     tags: [Accounts]
+   *     security:
+   *       - apiKey: []
+   *     parameters:
+   *       - $ref: '#/components/parameters/budgetSyncId'
+   *       - $ref: '#/components/parameters/accountGroupId'
+   *       - $ref: '#/components/parameters/budgetEncryptionPassword'
+   *     requestBody:
+   *       required: false
+   *     responses:
+   *       '200':
+   *         description: Account group deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/GeneralResponseMessage'
+   *               examples:
+   *                 - message: Account group deleted
+   *       '404':
+   *         $ref: '#/components/responses/404'
+   *       '500':
+   *         $ref: '#/components/responses/500'
+   */
+  router.delete('/budgets/:budgetSyncId/accountgroups/:accountGroupId', async (req, res, next) => {
+    try {
+      await validateAccountGroupExists(res, req.params.accountGroupId);
+      await res.locals.budget.deleteAccountGroup(req.params.accountGroupId)
+      res.json({'message': 'Account group deleted'});
+    } catch(err) {
+      next(err);
+    }
+  });
+
 
   async function validateAccountExists(res, accountId) {
     const account = await res.locals.budget.getAccount(accountId);
@@ -678,9 +916,23 @@ module.exports = (router) => {
     }
   }
 
+  async function validateAccountGroupExists(res, accountGroupId) {
+    const accountGroups = await res.locals.budget.getAccountGroups();
+    const accountGroup = accountGroups.find(ag => ag.id == accountGroupId);
+    if (!accountGroup) {
+      throw new Error('Account group not found');
+    }
+  }
+
   function validateAccountBody(account) {
     if (isEmpty(account)) {
       throw new Error('account information is required');
+    }
+  }
+
+  function validateAccountGroupBody(accountGroup) {
+    if (isEmpty(accountGroup)) {
+      throw new Error('accountGroup information is required');
     }
   }
 }
